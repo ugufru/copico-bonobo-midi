@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bonobo Memory Map</title>
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --ink: #1c1c1e; --muted: #67676d; --line: #d4d2ca;
+  --ram: #d8e6f4; --rom: #f0e2c8; --cart: #eadcf2; --io: #dcefdf; --sys: #e4e4e4; --free: #f2f1ec;
+  --bonobo: #e2572b; --bonobo-ink: #ffffff; --bonobo-soft: #f9d6c8; --hazard: #c0392b;
+  --accent: #2c6cb0; --conn: rgba(44,108,176,0.08); --ok: #2e7d32; --bad: #b23b2b;
+  --hatch: rgba(226,87,43,0.55);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151517; --panel: #1f1f22; --ink: #ececef; --muted: #a0a0a8; --line: #3a3a40;
+    --ram: #1f3550; --rom: #4a3a1e; --cart: #3c2a4b; --io: #1f4029; --sys: #333338; --free: #232327;
+    --bonobo: #f0703f; --bonobo-ink: #1a0f0a; --bonobo-soft: #5a2a18; --hazard: #ff6b5b;
+    --accent: #6aa8ea; --conn: rgba(106,168,234,0.10); --ok: #7bd389; --bad: #ff7b6b;
+    --hatch: rgba(240,112,63,0.6);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151517; --panel: #1f1f22; --ink: #ececef; --muted: #a0a0a8; --line: #3a3a40;
+  --ram: #1f3550; --rom: #4a3a1e; --cart: #3c2a4b; --io: #1f4029; --sys: #333338; --free: #232327;
+  --bonobo: #f0703f; --bonobo-ink: #1a0f0a; --bonobo-soft: #5a2a18; --hazard: #ff6b5b;
+  --accent: #6aa8ea; --conn: rgba(106,168,234,0.10); --ok: #7bd389; --bad: #ff7b6b;
+  --hatch: rgba(240,112,63,0.6);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.wrap { max-width: 1280px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+h2 { font-size: 16px; margin: 0 0 8px; }
+.lede { color: var(--muted); margin: 0 0 16px; max-width: 900px; }
+code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; margin: 0 0 14px; }
+.controls label { font-size: 14px; color: var(--muted); }
+select, input[type=text] {
+  font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 6px; padding: 4px 8px;
+}
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+@media (max-width: 980px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; }
+svg { width: 100%; height: auto; display: block; }
+svg text { fill: var(--ink); font-size: 11px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+svg .addr { fill: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+svg .hdr { font-weight: 600; font-size: 12px; }
+svg .sub { fill: var(--muted); font-size: 10.5px; }
+.k-ram { fill: var(--ram); } .k-rom { fill: var(--rom); } .k-cart { fill: var(--cart); }
+.k-io { fill: var(--io); } .k-sys { fill: var(--sys); } .k-free { fill: var(--free); }
+.k-bonobo { fill: var(--bonobo); } .k-hazard { fill: var(--hazard); }
+svg .region { stroke: var(--line); stroke-width: 1; cursor: pointer; }
+svg .hit:hover .region, svg .hit:focus .region { stroke: var(--accent); stroke-width: 2; }
+svg .hit:focus { outline: none; }
+svg .sel .region { stroke: var(--accent); stroke-width: 3; }
+svg .ghost { fill: none; stroke: var(--bonobo); stroke-dasharray: 3 2; stroke-width: 1.5; cursor: pointer; }
+svg .conn { fill: var(--conn); stroke: var(--accent); stroke-opacity: 0.35; }
+svg .band { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+svg .on-bonobo { fill: var(--bonobo-ink); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.sw { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--line); vertical-align: -2px; margin-right: 5px; }
+#detail h2 { font-size: 17px; }
+#detail .range { font-family: ui-monospace, Menlo, monospace; color: var(--muted); margin: -4px 0 10px; }
+#detail p { margin: 0 0 10px; }
+#detail ol, #detail ul { margin: 0 0 10px; padding-left: 20px; }
+#detail li { margin-bottom: 4px; }
+.warn { border-left: 3px solid var(--hazard); padding: 6px 10px; background: color-mix(in srgb, var(--hazard) 10%, transparent); border-radius: 4px; margin: 0 0 10px; }
+.note { font-size: 13px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; }
+.chip {
+  font: 13px ui-monospace, Menlo, monospace; border: 1px solid var(--line); background: var(--panel);
+  color: var(--ink); border-radius: 999px; padding: 3px 10px; cursor: pointer;
+}
+.chip:hover, .chip:focus-visible { border-color: var(--accent); }
+.chip.in { border-left: 4px solid var(--accent); }
+.chip.out { border-left: 4px solid var(--bonobo); }
+.chip.bi { border-left: 4px solid var(--ok); }
+.chip.none { border-left: 4px solid var(--muted); color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; margin-top: 16px; }
+@media (max-width: 980px) { .grid2 { grid-template-columns: minmax(0,1fr); } }
+.tracer-in { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-bottom: 10px; }
+.tracer-in input[type=text] { width: 90px; font-family: ui-monospace, Menlo, monospace; }
+.steps { list-style: none; padding: 0; margin: 0; }
+.steps li { padding: 7px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.steps .tag { display: inline-block; min-width: 34px; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
+.ok { color: var(--ok); } .bad { color: var(--bad); }
+.result { margin-top: 10px; font-weight: 600; }
+.foot { margin-top: 18px; font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bonobo v2.4: where the card lives in the CoCo's address space</h1>
+  <p class="lede">From the CPU's point of view, the Bonobo has no ROM, no RAM and no registers. It decodes
+  four addresses into four strobe wires to the Pico, and it can drive four control lines plus the data bus.
+  Every "register" is just whatever the Pico does in real time during a strobe. Click any region, byte or
+  signal to see the hardware path behind it.</p>
+
+  <div class="controls">
+    <label>Machine
+      <select id="machine">
+        <option value="coco12">CoCo 1 / 2 (SAM map type 0)</option>
+        <option value="coco3">CoCo 3 (power-on ROM mode)</option>
+      </select>
+    </label>
+    <label>JP1 port block
+      <select id="jp1">
+        <option value="select68">select68, bridged default ($FF68)</option>
+        <option value="select78">select78, rewired ($FF78)</option>
+        <option value="select60">select60, mislabeled (really $FF28)</option>
+        <option value="select70">select70, mislabeled (really $FF38)</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="slenb"> Show /SLENB override reach</label>
+  </div>
+
+  <div class="layout">
+    <div class="card">
+      <svg id="map" viewBox="0 0 900 590" role="img" aria-label="Zooming memory map of the CoCo with the Bonobo port block"></svg>
+      <div class="legend">
+        <span><span class="sw" style="background:var(--ram)"></span>RAM</span>
+        <span><span class="sw" style="background:var(--rom)"></span>ROM</span>
+        <span><span class="sw" style="background:var(--cart)"></span>Cartridge ROM (/CTS)</span>
+        <span><span class="sw" style="background:var(--io)"></span>I/O</span>
+        <span><span class="sw" style="background:var(--sys)"></span>System / vectors</span>
+        <span><span class="sw" style="background:var(--free)"></span>Unassigned</span>
+        <span><span class="sw" style="background:var(--bonobo)"></span>Bonobo strobes</span>
+        <span><span class="sw" style="background:transparent;border:1.5px dashed var(--bonobo)"></span>Other JP1 choices</span>
+      </div>
+    </div>
+    <div class="card" id="detail" aria-live="polite"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Edge-connector signals</h2>
+      <p class="note">What the card can see and touch, apart from addresses.
+        Blue = into the Pico, orange = driven by the Pico, green = both, grey = not reachable.</p>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="card">
+      <h2>Decode tracer</h2>
+      <p class="note">Follow one bus cycle through U1 to U4 (74HC138s) for any address.</p>
+      <div class="tracer-in">
+        <label>Address $<input type="text" id="taddr" value="FF68" maxlength="4" spellcheck="false" aria-label="Address in hex"></label>
+        <label><input type="radio" name="rw" value="1" checked> Read</label>
+        <label><input type="radio" name="rw" value="0"> Write</label>
+        <label><input type="checkbox" id="ehigh" checked> E high</label>
+      </div>
+      <ul class="steps" id="steps"></ul>
+      <div class="result" id="tresult"></div>
+    </div>
+  </div>
+
+  <p class="foot">Bonobo facts come from the v2.4 KiCad netlist (spoon24b) as recorded in the copico-bonobo
+  knowledge base. The surrounding CoCo memory map, and the other cartridges named in the $FF60 to $FF7F
+  window, are general CoCo knowledge rather than anything in the Bonobo repo; treat those as unverified.</p>
+</div>
+
+<script>
+(function () {
+  const NS = "http://www.w3.org/2000/svg";
+  const TOP = 40, H = 540;
+  const C1 = { x: 64, w: 150 }, C2 = { x: 340, w: 190 }, C3 = { x: 640, w: 250 };
+  const hex = (n, d = 4) => "$" + n.toString(16).toUpperCase().padStart(d, "0");
+  const state = { machine: "coco12", jp1: "select68", slenb: false, sel: null };
+
+  const JP1 = {
+    select60: { base: 0xFF28, out: 4, name: "select60 (U3 O4)" },
+    select68: { base: 0xFF68, out: 5, name: "select68 (U3 O5)" },
+    select70: { base: 0xFF38, out: 6, name: "select70 (U3 O6)" },
+    select78: { base: 0xFF78, out: 7, name: "select78 (U3 O7)" },
+  };
+
+  const NO_CTS = "The Bonobo cannot answer here. /CTS (edge pin 32) goes only to the P4 breakout, not to the Pico or the decoder, so the card cannot act as a ROM cartridge.";
+  const BLIND = "The Bonobo has no connection to this range. No address line reaches the Pico, and the decoder only fires for its 4-byte port block.";
+
+  const FULL = {
+    coco12: [
+      { s: 0x0000, e: 0x8000, name: "RAM", kind: "ram", desc: "Main RAM (4K to 64K depending on the machine). The SAM generates the DRAM timing.", bon: BLIND },
+      { s: 0x8000, e: 0xA000, name: "Extended BASIC ROM", kind: "rom", desc: "Extended Color BASIC (SAM select S=1). In map type 1 this becomes RAM.", bon: BLIND },
+      { s: 0xA000, e: 0xC000, name: "Color BASIC ROM", kind: "rom", desc: "Color BASIC (SAM select S=2). Also supplies the vectors seen at $FFF0 to $FFFF.", bon: BLIND },
+      { s: 0xC000, e: 0xFF00, name: "Cartridge ROM", kind: "cart", desc: "Cartridge space: the SAM asserts /CTS (select S=3) and a ROM pak answers. Disk BASIC lives here.", bon: NO_CTS },
+      { s: 0xFF00, e: 0x10000, name: "I/O page", kind: "io", desc: "PIAs, cartridge I/O, SAM control bits and vectors. Zoomed in the middle column.", bon: "The Bonobo's 4-byte port block sits inside this page." },
+    ],
+    coco3: [
+      { s: 0x0000, e: 0x8000, name: "RAM (via MMU)", kind: "ram", desc: "Eight 8K MMU blocks select pages out of 128K or 512K of RAM.", bon: BLIND },
+      { s: 0x8000, e: 0xC000, name: "Internal ROM", kind: "rom", desc: "Super Extended / Extended / Color BASIC in the internal 32K ROM.", bon: BLIND },
+      { s: 0xC000, e: 0xFF00, name: "Cartridge or internal ROM", kind: "cart", desc: "GIME INIT0 ($FF90) ROM-mode bits choose internal ROM or cartridge (/CTS) here. With the constant-page bit set, $FE00 to $FEFF is fixed RAM.", bon: NO_CTS },
+      { s: 0xFF00, e: 0x10000, name: "I/O page", kind: "io", desc: "PIAs, cartridge I/O, GIME, MMU, palette and vectors. Zoomed in the middle column.", bon: "The Bonobo's 4-byte port block sits inside this page." },
+    ],
+  };
+
+  const PAGE = {
+    coco12: [
+      { s: 0xFF00, e: 0xFF20, name: "PIA0", kind: "io", desc: "Keyboard matrix, joystick comparator, HSYNC and VSYNC interrupts. Four registers mirrored through the range.", bon: BLIND },
+      { s: 0xFF20, e: 0xFF40, name: "PIA1", kind: "io", desc: "6-bit DAC, cassette, bit-banger RS-232, VDG mode, sound enable. CB1 is the /CART input that raises FIRQ. Four registers mirrored.", bon: "The Bonobo drives /CART (GP6 via JP2), which lands on this PIA's CB1 pin. The mislabeled JP1 options select60 and select70 also decode inside this range ($FF28, $FF38)." },
+      { s: 0xFF40, e: 0xFF60, name: "/SCS cart I/O", kind: "io", desc: "The SAM asserts /SCS (edge pin 36) here. Floppy controllers live in this range.", bon: "/SCS goes only to the P4 breakout. The Bonobo cannot answer here." },
+      { s: 0xFF60, e: 0xFF80, name: "Unassigned", kind: "free", desc: "Nothing inside the CoCo answers. Cartridges that fully decode their own address can live here.", bon: "The Bonobo's home. JP1 bridged picks $FF68 to $FF6B; rewiring JP1 to select78 picks $FF78 to $FF7B." },
+      { s: 0xFF80, e: 0xFFC0, name: "Unassigned", kind: "free", desc: "No internal device on a CoCo 1 or 2.", bon: BLIND },
+      { s: 0xFFC0, e: 0xFFE0, name: "SAM control", kind: "sys", desc: "Write-only bit pairs (even address clears, odd sets): video mode, display offset, page, CPU rate, memory size, map type.", bon: BLIND },
+      { s: 0xFFE0, e: 0xFFF0, name: "Reserved", kind: "sys", desc: "Mapped from the ROM at $BFE0.", bon: BLIND },
+      { s: 0xFFF0, e: 0x10000, name: "Vectors", kind: "sys", desc: "Reset, NMI, SWI, IRQ, FIRQ vectors, read from Color BASIC ROM $BFF0 to $BFFF.", bon: "The card cannot see these addresses, but because the data bus can be overridden under /SLENB, the Pico can supply the bytes the CPU fetches here if it times the cycles right." },
+    ],
+    coco3: [
+      { s: 0xFF00, e: 0xFF20, name: "PIA0", kind: "io", desc: "Keyboard matrix, joystick comparator, HSYNC and VSYNC interrupts.", bon: BLIND },
+      { s: 0xFF20, e: 0xFF40, name: "PIA1", kind: "io", desc: "DAC, cassette, bit-banger RS-232, sound. CB1 is the /CART FIRQ input.", bon: "The Bonobo drives /CART, which lands on CB1 here. JP1 select60 / select70 also decode inside this range ($FF28, $FF38)." },
+      { s: 0xFF40, e: 0xFF60, name: "/SCS cart I/O", kind: "io", desc: "Cartridge I/O select. Floppy controllers live here.", bon: "/SCS goes only to the P4 breakout. The Bonobo cannot answer here." },
+      { s: 0xFF60, e: 0xFF80, name: "Unassigned", kind: "free", desc: "No internal device. Fully decoded cartridges can live here.", bon: "The Bonobo's home: $FF68 (default) or $FF78 (JP1 rewired)." },
+      { s: 0xFF80, e: 0xFF90, name: "Reserved", kind: "sys", desc: "Reserved on the CoCo 3.", bon: BLIND },
+      { s: 0xFF90, e: 0xFFA0, name: "GIME control", kind: "io", desc: "INIT0/INIT1, IRQ and FIRQ enables, timer, video mode and resolution, vertical offset.", bon: BLIND },
+      { s: 0xFFA0, e: 0xFFB0, name: "MMU", kind: "io", desc: "Two sets of eight block registers.", bon: BLIND },
+      { s: 0xFFB0, e: 0xFFC0, name: "Palette", kind: "io", desc: "Sixteen palette registers.", bon: BLIND },
+      { s: 0xFFC0, e: 0xFFE0, name: "SAM bits", kind: "sys", desc: "SAM-compatible bit pairs kept by the GIME (CPU rate, map type, display offset).", bon: BLIND },
+      { s: 0xFFE0, e: 0xFFF0, name: "Reserved", kind: "sys", desc: "Reserved.", bon: BLIND },
+      { s: 0xFFF0, e: 0x10000, name: "Vectors", kind: "sys", desc: "Interrupt and reset vectors from ROM.", bon: "Not visible to the card, but reachable through the /SLENB data override." },
+    ],
+  };
+
+  // Strobe table: port 0 = Control (A1=0), port 1 = Data (A1=1)
+  const STROBE = {
+    "0W": { name: "Control write", net: "y_wc", u4: "O0", u9: "A3 to B3", gp: 22 },
+    "0R": { name: "Status read", net: "y_rc", u4: "O1", u9: "A4 to B4", gp: 26 },
+    "1W": { name: "Data write", net: "y_wd", u4: "O2", u9: "A5 to B5", gp: 27 },
+    "1R": { name: "Data read", net: "y_rd", u4: "O3", u9: "A6 to B6", gp: 28 },
+  };
+
+  const OTHERS = [ // general CoCo knowledge, unverified
+    { s: 0xFF68, e: 0xFF6C, name: "Deluxe RS-232 Pak (6551)" },
+    { s: 0xFF7A, e: 0xFF7C, name: "Orchestra-90 DAC" },
+    { s: 0xFF7D, e: 0xFF7F, name: "Speech/Sound Cart" },
+  ];
+  const PIA1_REG = ["port A data / DDR", "port A control", "port B data / DDR", "port B control (CB1 = /CART)"];
+
+  // ---------- SVG helpers ----------
+  const svg = document.getElementById("map");
+  function el(tag, attrs, parent) {
+    const n = document.createElementNS(NS, tag);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    (parent || svg).appendChild(n);
+    return n;
+  }
+  function text(x, y, s, cls, anchor, parent) {
+    const t = el("text", { x, y, class: cls || "", "text-anchor": anchor || "middle", "dominant-baseline": "middle" }, parent);
+    t.textContent = s;
+    return t;
+  }
+  function hit(id, onSelect) {
+    const g = el("g", { class: "hit", tabindex: "0", role: "button", "data-id": id });
+    const go = () => { state.sel = id; onSelect(); markSel(); };
+    g.addEventListener("click", go);
+    g.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+    return g;
+  }
+  function markSel() {
+    svg.querySelectorAll(".hit").forEach(g => g.classList.toggle("sel", g.getAttribute("data-id") === state.sel));
+  }
+
+  const y1 = a => TOP + (a / 0x10000) * H;
+  const y2 = a => TOP + ((a - 0xFF00) / 256) * H;
+
+  // ---------- byte classification for the zoom column ----------
+  function blockBase() { return JP1[state.jp1].base; }
+  function byteInfo(a) {
+    const b = blockBase();
+    if (a >= b && a < b + 4) {
+      const port = (a >> 1) & 1;
+      return { key: "bon" + a, bon: true, port, alias: (a & 1) === 1 };
+    }
+    if (a >= 0xFF20 && a < 0xFF40) return { key: "pia" + (a & 3) + "-" + a, label: "PIA1 " + PIA1_REG[a & 3], kind: "io", pia: true };
+    for (const o of OTHERS) if (a >= o.s && a < o.e) return { key: "o" + o.s, label: o.name + " *", kind: "free", other: o };
+    return { key: "free", label: "unassigned", kind: "free" };
+  }
+
+  // ---------- render ----------
+  function render() {
+    svg.innerHTML = "";
+    const defs = el("defs", {});
+    const pat = el("pattern", { id: "hatch", width: 8, height: 8, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, defs);
+    el("rect", { width: 3, height: 8, fill: "var(--hatch)" }, pat);
+
+    text(C1.x + C1.w / 2, 14, "64K CPU address space", "hdr");
+    text(C1.x + C1.w / 2, 28, "$0000 at top", "sub");
+    text(C2.x + C2.w / 2, 14, "I/O page $FF00 to $FFFF", "hdr");
+    text(C2.x + C2.w / 2, 28, "2 px per byte", "sub");
+    const b = blockBase(), win = b & 0xFFE0;
+    text(C3.x + C3.w / 2, 14, hex(win) + " to " + hex(win + 0x1F) + ", byte by byte", "hdr");
+    text(C3.x + C3.w / 2, 28, "left half read, right half write", "sub");
+
+    // Column 1
+    for (const r of FULL[state.machine]) {
+      const id = "full-" + r.s;
+      const g = hit(id, () => showRegion(r));
+      const ya = y1(r.s), yb = y1(r.e);
+      el("rect", { x: C1.x, y: ya, width: C1.w, height: Math.max(yb - ya, 2), class: "region k-" + r.kind }, g);
+      if (yb - ya > 16) text(C1.x + C1.w / 2, (ya + yb) / 2, r.name, "", "middle", g);
+      if (r.s !== 0xFF00) text(C1.x - 6, ya + 6, hex(r.s), "addr", "end");
+    }
+    text(C1.x - 6, y1(0xFF00) - 5, "$FF00", "addr", "end");
+    el("rect", { x: C1.x - 1, y: y1(0xFF00) - 1, width: C1.w + 2, height: y1(0x10000) - y1(0xFF00) + 2, class: "band" });
+
+    // Connector 1
+    const g1 = hit("full-65280", () => showRegion(FULL[state.machine].find(r => r.s === 0xFF00)));
+    el("polygon", { class: "conn", points: [
+      [C1.x + C1.w, y1(0xFF00)], [C2.x - 46, TOP], [C2.x - 46, TOP + H], [C1.x + C1.w, y1(0x10000)]
+    ].map(p => p.join(",")).join(" ") }, g1);
+
+    // Column 2
+    for (const r of PAGE[state.machine]) {
+      const id = "page-" + r.s;
+      const g = hit(id, () => showRegion(r));
+      const ya = y2(r.s), yb = y2(r.e);
+      el("rect", { x: C2.x, y: ya, width: C2.w, height: yb - ya, class: "region k-" + r.kind }, g);
+      text(C2.x + C2.w / 2, (ya + yb) / 2, r.name, "", "middle", g);
+      text(C2.x - 6, ya + 6, hex(r.s), "addr", "end");
+    }
+    for (const k in JP1) {
+      const o = JP1[k];
+      if (k === state.jp1) continue;
+      const g = hit("ghost-" + k, () => showGhost(k));
+      el("rect", { x: C2.x + C2.w - 58, y: y2(o.base), width: 54, height: y2(o.base + 4) - y2(o.base), class: "ghost" }, g);
+    }
+    const gb = hit("block", () => showBlock());
+    const hazard = b < 0xFF40;
+    el("rect", { x: C2.x + C2.w - 62, y: y2(b) - 1, width: 62, height: y2(b + 4) - y2(b) + 2, class: "region k-" + (hazard ? "hazard" : "bonobo") }, gb);
+    el("rect", { x: C2.x - 1, y: y2(win) - 1, width: C2.w + 2, height: y2(win + 32) - y2(win) + 2, class: "band" });
+
+    // Connector 2
+    el("polygon", { class: "conn", points: [
+      [C2.x + C2.w, y2(win)], [C3.x - 46, TOP], [C3.x - 46, TOP + H], [C2.x + C2.w, y2(win + 32)]
+    ].map(p => p.join(",")).join(" ") });
+
+    // Column 3: runs of bytes, Bonobo bytes split read | write
+    const rowH = H / 32;
+    let a = win;
+    while (a < win + 32) {
+      const info = byteInfo(a);
+      let end = a + 1;
+      if (!info.bon) while (end < win + 32 && byteInfo(end).key === info.key) end++;
+      const ya = TOP + (a - win) * rowH, h = (end - a) * rowH;
+      if (info.bon) {
+        for (const [half, acc] of [[0, "R"], [1, "W"]]) {
+          const sk = info.port + acc;
+          const g = hit("byte-" + a + acc, () => showStrobe(sk, a));
+          const x = C3.x + half * C3.w / 2;
+          el("rect", { x, y: ya, width: C3.w / 2, height: h, class: "region k-" + (hazard ? "hazard" : "bonobo") }, g);
+          const lbl = acc + ": " + STROBE[sk].name.split(" ")[0] + (info.alias ? " (alias)" : "") + "  GP" + STROBE[sk].gp;
+          text(x + C3.w / 4, ya + h / 2, lbl, "on-bonobo", "middle", g);
+        }
+      } else {
+        const g = hit("byte-" + a, () => showByte(info, a, end));
+        el("rect", { x: C3.x, y: ya, width: C3.w, height: h, class: "region k-" + info.kind }, g);
+        text(C3.x + C3.w / 2, ya + h / 2, info.label, "", "middle", g);
+      }
+      for (let i = a; i < end; i++) text(C3.x - 6, TOP + (i - win) * rowH + rowH / 2, hex(i), "addr", "end");
+      a = end;
+    }
+
+    // /SLENB overlay
+    if (state.slenb) {
+      for (const [x, w] of [[C1.x, C1.w], [C2.x, C2.w]]) {
+        el("rect", { x, y: TOP, width: w, height: H, fill: "url(#hatch)", "pointer-events": "none" });
+      }
+      const g = hit("slenb", showSlenb);
+      el("rect", { x: C1.x + 8, y: TOP + H / 2 - 30, width: C1.w - 16, height: 60, rx: 6, class: "region k-bonobo" }, g);
+      text(C1.x + C1.w / 2, TOP + H / 2 - 9, "/SLENB low:", "on-bonobo", "middle", g);
+      text(C1.x + C1.w / 2, TOP + H / 2 + 9, "data overridable", "on-bonobo", "middle", g);
+    }
+    markSel();
+  }
+
+  // ---------- detail panel ----------
+  const detail = document.getElementById("detail");
+  function setDetail(html) { detail.innerHTML = html; }
+
+  function showRegion(r) {
+    setDetail(`<h2>${r.name}</h2><div class="range">${hex(r.s)} to ${hex(r.e - 1)} (${r.e - r.s} bytes)</div>
+      <p>${r.desc}</p><h2>Bonobo</h2><p>${r.bon}</p>`);
+  }
+
+  function blockAddrs() { const b = blockBase(); return `${hex(b)} to ${hex(b + 3)}`; }
+
+  function showBlock() {
+    const b = blockBase(), o = JP1[state.jp1];
+    const hz = b < 0xFF40 ? `<div class="warn">This JP1 choice decodes inside the PIA1 range. On reads both PIA1 and the Pico could drive the data bus at once. The net names select60 and select70 assume A0 is the 74HC138's most significant select input; it is the least significant, so they decode $FF28 and $FF38.</div>` : "";
+    setDetail(`<h2>Bonobo port block</h2><div class="range">${blockAddrs()} via JP1 = ${o.name}</div>${hz}
+      <p>Four bytes, but really only <b>two registers by two directions</b>. A1 picks Control or Data, R/W picks
+      read or write, and A0 is not decoded, so each odd address is an alias of the even one below it.</p>
+      <ul>
+        <li><code>${hex(b)}</code> write: Control strobe to GP22</li>
+        <li><code>${hex(b)}</code> read: Status strobe to GP26</li>
+        <li><code>${hex(b + 2)}</code> write: Data strobe to GP27</li>
+        <li><code>${hex(b + 2)}</code> read: Data strobe to GP28</li>
+      </ul>
+      <p>There is no latch, flip-flop or memory behind these addresses. The board turns each access into a
+      low pulse on one Pico pin, lasting as long as E is high (about 560 ns at 0.89 MHz, about 280 ns at
+      1.79 MHz). Whatever the Pico does inside that pulse <i>is</i> the register.</p>
+      <p class="note">Click a byte in the right-hand column for the exact signal path.</p>`);
+  }
+
+  function showGhost(k) {
+    const o = JP1[k];
+    const bad = o.base < 0xFF40;
+    setDetail(`<h2>JP1 alternative: ${k}</h2><div class="range">${hex(o.base)} to ${hex(o.base + 3)}</div>
+      <p>U3 drives four candidate selects onto header J5. JP1 (a bridged solder jumper) connects select68 to
+      select3, which enables U4. Cut JP1 and wire a different J5 pin to select3 to move the block.</p>
+      ${bad ? `<div class="warn">${k} is labeled as if it decoded ${k.replace("select", "$FF")}, but it really decodes ${hex(o.base)}, inside PIA1's mirror range. Do not use it.</div>`
+            : `<p>${k} really does decode ${hex(o.base)}, so it is the one usable alternative.</p>`}
+      <p class="note">Use the JP1 selector above to see the map with this choice.</p>`);
+  }
+
+  function showStrobe(sk, a) {
+    const s = STROBE[sk], b = blockBase(), write = sk.endsWith("W"), port = sk[0] === "1";
+    const lowbyte = a & 0xFF;
+    const chain = [
+      `6809 puts ${hex(a)} on A0 to A15 with R/W = ${write ? 0 : 1}.${(a & 1) ? " A0 = 1, but A0 is never decoded, so this is the same as " + hex(a - 1) + "." : ""}`,
+      `U1 sees A15 to A12 = 1111 and A7 = 0, so its O7 (select1) goes low.`,
+      `U2 sees A11 to A8 = 1111 and A2 = 0, so its O7 (select2) goes low.`,
+      `U3 (enabled by A5 = 1) decodes A3, A4, A6 into ${JP1[state.jp1].name}; through JP1 this is select3.`,
+      `U4 is enabled by select3, select2 and E. Its inputs A1 = ${port ? 1 : 0} and R/W = ${write ? 0 : 1} pick ${s.u4} = <code>${s.net}</code>.`,
+      `U9 (4245, fixed 5 V to 3.3 V) passes it ${s.u9} to <b>GP${s.gp}</b>, low for the whole E-high time.`,
+    ];
+    const after = write
+      ? `<p>The CPU's byte is on D0 to D7 for the cycle. U8 passes it to GP8 to GP15 only while GP16 (DIR) is 1 (toward the Pico).
+         Nothing on the board stores it: the Pico must sample during the strobe or the byte is gone.</p>`
+      : `<p>The CPU latches D0 to D7 as E falls. To answer, the Pico must set GP16 = 0 (U8 toward the CoCo) and drive GP8 to GP15 before then.
+         If it does not, nothing on the card drives the bus and the CPU reads whatever the bus floats to.</p>
+         <div class="warn">U8's /OE is tied to ground. Whenever GP16 = 0 the card drives the data bus, for any address.
+         Only the Pico's own timing keeps it confined to this strobe.</div>`;
+    const hz = b < 0xFF40 && !write ? `<div class="warn">In the PIA1 range, PIA1 answers this read too: bus contention.</div>` : "";
+    const rs = b === 0xFF68 ? `<p class="note">A Deluxe RS-232 Pak (6551 ACIA) is commonly listed at $FF68 to $FF6B, so the two would collide in a Multi-Pak (general CoCo knowledge, unverified).</p>` : "";
+    setDetail(`<h2>${hex(a)} ${write ? "write" : "read"}: ${s.name}</h2>
+      <div class="range">strobe ${s.net} to GP${s.gp}, active low</div>${hz}
+      <ol>${chain.map(c => `<li>${c}</li>`).join("")}</ol>${after}${rs}`);
+    setTracer(a, !write);
+  }
+
+  function showByte(info, a, end) {
+    let body;
+    if (info.pia) body = `<p>PIA1 only decodes A0 and A1, so its four registers repeat every 4 bytes across $FF20 to $FF3F. This byte reaches ${PIA1_REG[a & 3]}.</p>`;
+    else if (info.other) body = `<p>${info.other.name} is commonly listed at ${hex(info.other.s)} to ${hex(info.other.e - 1)}. That is general CoCo knowledge, not verified here. It matters only if both cards share a Multi-Pak.</p>`;
+    else body = `<p>Nothing inside the CoCo answers here, and the Bonobo's decoder does not fire.</p>`;
+    setDetail(`<h2>${info.label.replace(" *", "")}</h2><div class="range">${hex(a)}${end - a > 1 ? " to " + hex(end - 1) : ""}</div>${body}
+      <p class="note">The tracer below shows why the decoder stays quiet.</p>`);
+    setTracer(a, true);
+  }
+
+  function showSlenb() {
+    setDetail(`<h2>/SLENB override</h2><div class="range">reaches every address, sees none</div>
+      <p>/SLENB (edge pin 40) tells the CoCo to deselect its own ROM, RAM and I/O for the current cycle. With GP19 (SPOON) low,
+      U10 drives /SLENB from GP18, and with GP16 = 0 the Pico drives D0 to D7. Together they let the card supply the byte for
+      <b>any</b> read cycle, anywhere in the 64K map.</p>
+      <p>The catch: no address line reaches the Pico. It only sees E (GP21) and /RESET (GP20). To know which cycle it is
+      feeding, it must count E cycles from a known point, typically just after releasing /HALT, when the 6809's next fetches are predictable.
+      This is how "spoonfeeding" works: hold the CPU, let it run a few cycles, and supply opcode bytes no matter what address it fetches from.</p>
+      <div class="warn">GP19 low enables all four U10 drivers at once (/HALT, /SLENB, /CART, /NMI), push-pull.
+      Any line the Pico is not asserting is actively driven high, which fights another device pulling it low, for example in a Multi-Pak.</div>`);
+  }
+
+  // ---------- signals ----------
+  const SIGNALS = [
+    { n: "D0-D7", c: "bi", d: "Through U8 (4245) to GP8 to GP15. DIR = GP16 (1 = toward Pico, 0 = toward CoCo). /OE is tied low, so the transceiver is always on: GP16 = 0 drives the CoCo bus regardless of address." },
+    { n: "E", c: "in", d: "Edge pin 6 through U9 to GP21. Also gates U4, so the four strobes only pulse while E is high. The Pico's only clock reference." },
+    { n: "/RESET", c: "in", d: "Edge pin 5 through U9 to GP20. Input only: U9 drives GP20 permanently, so the card can see a reset but cannot cause one." },
+    { n: "4 strobes", c: "in", d: "y_wc, y_rc, y_wd, y_rd from U4 through U9 to GP22, GP26, GP27, GP28. The only address information the Pico gets. Not contiguous (GP23 to GP25 are Pico-internal)." },
+    { n: "/HALT", c: "out", d: "GP17 through U10 to edge pin 3, effective only while GP19 (SPOON) is low. Stops the 6809 at the next instruction boundary." },
+    { n: "/SLENB", c: "out", d: "GP18 through U10 to edge pin 40, effective only while GP19 is low. Deselects the CoCo's internal devices so the card's data byte wins. See the /SLENB overlay." },
+    { n: "/CART", c: "out", d: "GP6 through JP2 and U10 to edge pin 8. On the CoCo this goes to PIA1 CB1, which can raise FIRQ: a usable interrupt from the card." },
+    { n: "/NMI", c: "out", d: "GP7 through JP3 and U10 to edge pin 4. Non-maskable, edge-triggered interrupt." },
+    { n: "SPOON (GP19)", c: "out", d: "/OE of U10. Low enables all four control-line drivers at once, push-pull; high floats all four. There is no per-line enable." },
+    { n: "A0-A15", c: "none", d: "Only into the 74HC138 decoder (and the P3 breakout). The Pico never sees an address." },
+    { n: "R/W", c: "none", d: "Only into U4, where it picks read vs write strobe. Not readable as a level." },
+    { n: "/CTS", c: "none", d: "Cartridge ROM select ($C000 to $FEFF). Breakout only, so the card cannot be a ROM pak." },
+    { n: "/SCS", c: "none", d: "Cartridge I/O select ($FF40 to $FF5F). Breakout only." },
+    { n: "Q, SND", c: "none", d: "Breakout only. No audio path into or out of the Pico." },
+    { n: "GP0-GP5", c: "none", d: "Not on the bus at all: free 3.3 V pins on header J1 (UART, I2C, SPI capable)." },
+  ];
+  const chips = document.getElementById("chips");
+  for (const s of SIGNALS) {
+    const b = document.createElement("button");
+    b.className = "chip " + s.c;
+    b.textContent = s.n;
+    b.addEventListener("click", () => {
+      state.sel = null; markSel();
+      const dir = { in: "Into the Pico", out: "Driven by the Pico", bi: "Bidirectional", none: "Not reachable by the Pico" }[s.c];
+      setDetail(`<h2>${s.n}</h2><div class="range">${dir}</div><p>${s.d}</p>`);
+    });
+    chips.appendChild(b);
+  }
+
+  // ---------- decode tracer ----------
+  const taddr = document.getElementById("taddr"), ehigh = document.getElementById("ehigh");
+  const stepsEl = document.getElementById("steps"), resEl = document.getElementById("tresult");
+  function setTracer(a, read) {
+    taddr.value = a.toString(16).toUpperCase().padStart(4, "0");
+    document.querySelector(`input[name=rw][value="${read ? 1 : 0}"]`).checked = true;
+    trace();
+  }
+  function trace() {
+    const v = parseInt(taddr.value.replace(/^\$|^0x/i, ""), 16);
+    stepsEl.innerHTML = ""; resEl.textContent = "";
+    if (isNaN(v) || v < 0 || v > 0xFFFF) { resEl.textContent = "Enter a hex address from 0000 to FFFF."; return; }
+    const A = n => (v >> n) & 1;
+    const rw = +document.querySelector("input[name=rw]:checked").value, E = ehigh.checked;
+    const steps = [];
+    const add = (ok, tag, msg) => steps.push({ ok, tag, msg });
+
+    const u1en = A(7) === 0 && A(12) === 1, u1n = A(15) + 2 * A(14) + 4 * A(13), sel1 = u1en && u1n === 7;
+    add(sel1, "U1", `A15 A14 A13 = ${A(15)}${A(14)}${A(13)}, enables A12 = ${A(12)} (needs 1), A7 = ${A(7)} (needs 0). ` +
+      (sel1 ? "O7 low: <b>select1</b>." : u1en ? `Output O${u1n}, not O7.` : "Chip disabled."));
+    const u2en = A(2) === 0 && A(8) === 1, u2n = A(11) + 2 * A(10) + 4 * A(9), sel2 = u2en && u2n === 7;
+    add(sel2, "U2", `A11 A10 A9 = ${A(11)}${A(10)}${A(9)}, enables A8 = ${A(8)} (needs 1), A2 = ${A(2)} (needs 0). ` +
+      (sel2 ? "O7 low: <b>select2</b>." : u2en ? `Output O${u2n}, not O7.` : "Chip disabled."));
+    const u3en = A(5) === 1, u3n = A(6) + 2 * A(4) + 4 * A(3), want = JP1[state.jp1].out, sel3 = u3en && u3n === want;
+    const u3names = { 4: "select60", 5: "select68", 6: "select70", 7: "select78" };
+    add(sel3, "U3", `select inputs A3 A4 A6 = ${A(3)}${A(4)}${A(6)}, enable A5 = ${A(5)} (needs 1). ` +
+      (u3en ? `Output O${u3n}${u3names[u3n] ? " (" + u3names[u3n] + ")" : " (not wired)"}; JP1 takes O${want}. ` : "Chip disabled. ") +
+      (sel3 ? "<b>select3</b> low." : ""));
+    const u4en = sel3 && sel2 && E;
+    const u4n = rw + 2 * A(1) + 4 * (sel1 ? 0 : 1);
+    let result = "No strobe. The Bonobo does not see this cycle at all.";
+    let ok4 = false, msg4;
+    if (!u4en) msg4 = `Enables: select3 ${sel3 ? "low" : "high"}, select2 ${sel2 ? "low" : "high"}, E ${E ? "high" : "low"}. Disabled.`;
+    else if (u4n >= 4) msg4 = `Enabled, but select1 is high, so the output is O${u4n}, which is not connected.`;
+    else {
+      ok4 = true;
+      const s = STROBE[A(1) + (rw ? "R" : "W")];
+      msg4 = `A1 = ${A(1)}, R/W = ${rw}, select1 low: output O${u4n} = <code>${s.net}</code>.`;
+      result = `GP${s.gp} goes low: ${s.name}. A0 = ${A(0)} is ignored.`;
+    }
+    add(ok4, "U4", msg4);
+    for (const s of steps) {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="tag ${s.ok ? "ok" : "bad"}">${s.tag}</span> <span class="${s.ok ? "ok" : "bad"}">${s.ok ? "yes" : "no"}</span>. ${s.msg}`;
+      stepsEl.appendChild(li);
+    }
+    resEl.className = "result " + (ok4 ? "ok" : "");
+    resEl.textContent = result;
+  }
+  taddr.addEventListener("input", trace);
+  ehigh.addEventListener("change", trace);
+  document.querySelectorAll("input[name=rw]").forEach(r => r.addEventListener("change", trace));
+
+  // ---------- controls ----------
+  document.getElementById("machine").addEventListener("change", e => { state.machine = e.target.value; state.sel = null; render(); showBlock(); });
+  document.getElementById("jp1").addEventListener("change", e => { state.jp1 = e.target.value; state.sel = "block"; render(); showBlock(); trace(); });
+  document.getElementById("slenb").addEventListener("change", e => { state.slenb = e.target.checked; render(); if (state.slenb) { state.sel = "slenb"; showSlenb(); markSel(); } });
+
+  render();
+  state.sel = "block"; markSel(); showBlock(); trace();
+})();
+</script>
+</body>
+</html>
